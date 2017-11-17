@@ -1,0 +1,74 @@
+---
+title: "Machine Learning Final Project"
+author: "Philip Mayfield"
+date: "November 17, 2017"
+output:
+  word_document: default
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Background
+Using the data from HAR (Human Activity Recognition) I am attempting to identify if a person has performed an exercise correctly using data from accelerometers worn during exercise. The humans were asked to lift weights correctly and with give misfunctions. From this, the exercise was placed into five classifications. For more information see this link.
+http://groupware.les.inf.puc-rio.br/har
+
+This analysis will predict the classifiction based on the acceleromter data.
+
+##Model Building
+The model was created by splitting the data into two datasets: training and crossvalidation. Note: the test dataset (20 rows) is a third dataset provided by the instructor. After splitting, I used a random forest to create a classifier. 
+
+```{r mobelcreate}
+library(caret)
+library(rattle)
+library(parallel)
+library(doParallel)
+
+#Read the data from disk
+AllData <- read.csv("pml-training.csv")
+TestData <- read.csv("pml-testing.csv")
+
+#use only columns with data suitable for analysis (remove time and blank rows)
+AllData <- AllData[,c(2,6:11,37:48,60:68,84:86,102,113:124,140,151:160)]
+##create training and crossvalidation datasets
+inTrain <- createDataPartition(y=AllData$classe, p=0.7, list=FALSE)
+training <- AllData[inTrain,]
+crossvalidation <- AllData[-inTrain,]
+
+
+##setup parallel processing, note this didn't work but the R developer said it would be fixed this week
+cluster <- makeCluster(8)
+registerDoParallel(cluster)
+#Configure trainControl object
+fitControl <- trainControl(method = "cv",number = 2,allowParallel = FALSE)  #I ended up running this serial not parallel due to R bug
+
+##rpart is R's method for Classification and regression trees (with parallel)
+modFit <- caret::train(classe  ~ .,method="rf",data=training,trControl = fitControl)
+
+##return to single core processing
+stopCluster(cluster)
+registerDoSEQ()
+```
+
+##Cross Validation
+I kept 30% of the data separate from the training data for cross validation. The confusion matrix below shows that the model is predicting quite well. 
+
+```{r cross}
+
+#Predicting new values
+pred<-predict(modFit,newdata=crossvalidation)
+result <- confusionMatrix(crossvalidation$classe, pred)
+result
+```
+
+##Prediction of Testing Dataset
+Below are the predictions for the 20 values in the test dataset.
+```{r predict}
+pred<-predict(modFit,newdata=TestData)
+pred
+
+
+
